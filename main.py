@@ -1,4 +1,5 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+import os
 import argparse
 import datetime
 import json
@@ -16,6 +17,10 @@ from datasets import build_dataset, get_coco_api_from_dataset
 from engine import evaluate, train_one_epoch
 from models import build_model
 
+# evaluation figure drawing
+import matplotlib.pyplot as plt
+import torchvision.transforms as T
+from PIL import Image, ImageDraw
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Set transformer detector', add_help=False)
@@ -99,6 +104,13 @@ def get_args_parser():
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+
+    ## NEW ARG to limit number of evals
+    parser.add_argument('--eval_checkpoint_period', default=5, type=int,
+                        help="Evaluation and checkpoint period by epoch, defalut is per 10 epochs")
+
+    parser.add_argument('--device_num', default=0, type=int, help='device number')
+
     return parser
 
 
@@ -111,6 +123,7 @@ def main(args):
     print(args)
 
     device = torch.device(args.device)
+    # device = torch.device('cpu')
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
@@ -193,9 +206,9 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             sampler_train.set_epoch(epoch)
-        train_stats = train_one_epoch(
-            model, criterion, data_loader_train, optimizer, device, epoch,
-            args.clip_max_norm)
+        # train_stats = train_one_epoch(
+        #     model, criterion, data_loader_train, optimizer, device, epoch,
+        #     args.clip_max_norm)
         lr_scheduler.step()
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
@@ -211,9 +224,76 @@ def main(args):
                     'args': args,
                 }, checkpoint_path)
 
-        test_stats, coco_evaluator = evaluate(
-            model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
-        )
+
+        if (epoch + 1) % args.eval_checkpoint_period == 0:  # per args.eval_checkpoint_period epoch log
+            # test_stats, coco_evaluator = evaluate(
+            #     model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
+            # )
+
+            # Get sample validation data
+            sample_in, sample_tgts = next(iter(data_loader_val))
+
+            # Draw boxes and original image
+            data_dir = './data/coco/val/'
+            image_id = int(sample_tgts[0]['image_id'])
+            orig_image = dataset_val.coco.loadImgs(image_id)[0]
+            orig_image = Image.open(os.path.join(data_dir, orig_image['file_name']))
+            draw = ImageDraw.Draw(orig_image, "RGBA")
+
+            # get annotations and labels
+            annotations = dataset_val.coco.imgToAnns[image_id]
+            cats = dataset_val.coco.cats
+            id2label = {k: v['name'] for k, v in cats.items()}
+
+            for annotation in annotations:
+                box = annotation['bbox']
+                class_idx = int(annotation['category_id'])
+                x, y, w, h = tuple(box)
+                draw.rectangle((x, y, x + w, y + h), outline='red', width=5)
+                draw.text((x, y), id2label[class_idx], fill='white')
+
+            fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+
+            ax[0].imshow(orig_image)
+            ax[0].set_xticks([])
+            ax[0].set_yticks([])
+
+            # Get model outputs
+            with torch.no_grad():
+                model.to(device)
+                model.eval()
+                sample_out = model(sample_in.to(device))
+                orig_target_sizes = torch.stack([t["orig_size"] for t in sample_tgts], dim=0)
+                results = postprocessors['bbox'](sample_out, orig_target_sizes.to(device))
+
+            ## Draw boxes and processed image
+            proc_img, _ = sample_in.decompose()
+            image = T.ToPILImage()(proc_img[0])
+            draw = ImageDraw.Draw(image, "RGBA")
+
+            max_score = 0
+            for i in range(len(results[0]['boxes'])):
+                box = results[0]['boxes'][i]
+                score = results[0]['scores'][i]
+                class_idx = int(results[0]['labels'][i])
+
+                max_score = max(max_score, score.max())
+
+                if score > 0.7:
+                    x_min, y_min, x_max, y_max = tuple(box)
+                    draw.rectangle((x_min, y_min, x_max, y_max), outline='black', width=5)
+                    draw.text((x_min, y_min), id2label[class_idx], fill='white')
+
+            ax[1].imshow(image)
+            ax[1].set_xticks([])
+            ax[1].set_yticks([])
+            fig.tight_layout()
+            # save figure
+            fig.savefig(os.path.join(args.output_dir, f'sample_val_fig_epoch_{epoch}.png'))
+
+            print()
+            print(f'max box scsore for this round is {max_score:04}')
+            print()
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      **{f'test_{k}': v for k, v in test_stats.items()},
