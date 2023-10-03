@@ -134,7 +134,9 @@ def main(args):
     np.random.seed(seed)
     random.seed(seed)
 
-    wandb.init(project='detr', entity='allcell', name='detr_testing')
+    run_name = args.wandb_run_name
+
+    wandb.init(project='detr', entity='allcell', name=run_name)
 
     model, criterion, postprocessors = build_model(args)
     model.to(device)
