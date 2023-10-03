@@ -108,9 +108,9 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
                                     for k, v in loss_dict_reduced.items() if k in weight_dict}
         loss_dict_reduced_unscaled = {f'{k}_unscaled': v
                                       for k, v in loss_dict_reduced.items()}
-        metric_logger.update(loss=sum(loss_dict_reduced_scaled.values()),
-                             **loss_dict_reduced_scaled,
-                             **loss_dict_reduced_unscaled)
+        # metric_logger.update(loss=sum(loss_dict_reduced_scaled.values()),
+        #                      **loss_dict_reduced_scaled,
+        #                      **loss_dict_reduced_unscaled)
         metric_logger.update(class_error=loss_dict_reduced['class_error'])
         metric_logger.update(loss_ce=loss_dict_reduced['loss_ce'])
         metric_logger.update(loss_bbox=loss_dict_reduced['loss_bbox'])
