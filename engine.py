@@ -5,6 +5,7 @@ Train and eval functions used in main.py
 import math
 import os
 import sys
+import wandb
 from typing import Iterable
 
 import torch
@@ -17,6 +18,9 @@ from datasets.panoptic_eval import PanopticEvaluator
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0):
+
+    wandb.init(project='detr', entity='allcell', name='detr_testing')
+
     model.train()
     criterion.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -47,6 +51,15 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         loss_value = losses_reduced_scaled.item()
 
+        wandb.log({
+            'training_loss': loss_value,
+            'training_class_error': loss_dict_reduced['class_error'],
+            'training_loss_ce': loss_dict_reduced['loss_ce'],
+            'training_loss_bbox': loss_dict_reduced['loss_bbox'],
+            'training_loss_giou': loss_dict_reduced['loss_giou'],
+        })
+
+
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
             print(loss_dict_reduced)
@@ -71,7 +84,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
 
 @torch.no_grad()
-def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, output_dir):
+def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, output_dir, save_json=False):
     model.eval()
     criterion.eval()
 
@@ -83,7 +96,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
     header = 'Test:'
 
     iou_types = tuple(k for k in ('segm', 'bbox') if k in postprocessors.keys())
-    coco_evaluator = CocoEvaluator(base_ds, iou_types)
+    coco_evaluator = CocoEvaluator(base_ds, iou_types, save_json=save_json)
     # coco_evaluator.coco_eval[iou_types[0]].params.iouThrs = [0, 0.1, 0.5, 0.75]
 
     panoptic_evaluator = None
@@ -94,7 +107,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
             output_dir=os.path.join(output_dir, "panoptic_eval"),
         )
 
-    for samples, targets in metric_logger.log_every(data_loader, 10, header):
+    for samples, targets in metric_logger.log_every(data_loader, 100, header):
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
@@ -111,6 +124,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
         # metric_logger.update(loss=sum(loss_dict_reduced_scaled.values()),
         #                      **loss_dict_reduced_scaled,
         #                      **loss_dict_reduced_unscaled)
+        metric_logger.update(loss=sum(loss_dict_reduced_scaled.values()))
         metric_logger.update(class_error=loss_dict_reduced['class_error'])
         metric_logger.update(loss_ce=loss_dict_reduced['loss_ce'])
         metric_logger.update(loss_bbox=loss_dict_reduced['loss_bbox'])
@@ -142,6 +156,13 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
         coco_evaluator.synchronize_between_processes()
     if panoptic_evaluator is not None:
         panoptic_evaluator.synchronize_between_processes()
+
+    if save_json:
+        all_res = utils.all_gather(coco_evaluator.results['bbox'])
+        results=[]
+        for p in all_res:
+            results.extend(p)
+        coco_evaluator.results['bbox'] = results
 
     # accumulate predictions from all images
     if coco_evaluator is not None:
