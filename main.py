@@ -246,7 +246,7 @@ def main(args):
 
             # Draw boxes and original image
             # data_dir = './data/coco/val/'
-            data_dir = './data/voc2coco_data_test/valid'
+            data_dir = './data/coco/val'
             image_id = int(sample_tgts[0]['image_id'])
             orig_image_path = dataset_val.coco.loadImgs(image_id)[0]
             orig_image = Image.open(os.path.join(data_dir, orig_image_path['file_name']))
