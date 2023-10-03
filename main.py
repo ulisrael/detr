@@ -21,6 +21,7 @@ from models import build_model
 import matplotlib.pyplot as plt
 import torchvision.transforms as T
 from PIL import Image, ImageDraw
+import wandb
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Set transformer detector', add_help=False)
@@ -130,6 +131,8 @@ def main(args):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+    wandb.init(project='detr', entity='allcell', name='detr_testing')
 
     model, criterion, postprocessors = build_model(args)
     model.to(device)
@@ -290,6 +293,8 @@ def main(args):
             fig.tight_layout()
             # save figure
             fig.savefig(os.path.join(args.output_dir, f'sample_val_fig_epoch_{epoch}.png'))
+
+            wandb.log({'sample_val_fig': wandb.Image(fig)})
 
             print()
             print(f'max box scsore for this round is {max_score:04}')
