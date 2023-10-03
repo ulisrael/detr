@@ -112,6 +112,8 @@ def get_args_parser():
 
     parser.add_argument('--device_num', default=0, type=int, help='device number')
 
+    parser.add_argument('--wandb_run_name', default='detr_testing', type=str, help='wandb run name')
+
     return parser
 
 
