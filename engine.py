@@ -180,6 +180,13 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
         stats['PQ_th'] = panoptic_res["Things"]
         stats['PQ_st'] = panoptic_res["Stuff"]
 
-    wandb.log({'coco stats': stats['coco_eval_bbox']})
+    wandb.log({
+        'val_class_error': stats['class_error'],
+        'val_loss_ce': stats['loss_ce'],
+        'val_loss_bbox': stats['loss_bbox'],
+        'val_loss_giou': stats['loss_giou'],
+        'val_loss': stats['loss'],
+        'cocoeval_bbox': stats['coco_eval_bbox'],
+    })
 
     return stats, coco_evaluator

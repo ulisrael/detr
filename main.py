@@ -158,6 +158,10 @@ def main(args):
     dataset_train = build_dataset(image_set='train', args=args)
     dataset_val = build_dataset(image_set='val', args=args)
 
+    ## tmp code for debuging on mac
+    # dataset_train = torch.utils.data.Subset(dataset_train, range(8))
+    # dataset_val = torch.utils.data.Subset(dataset_val, range(8))
+
     if args.distributed:
         sampler_train = DistributedSampler(dataset_train)
         sampler_val = DistributedSampler(dataset_val, shuffle=False)
@@ -209,9 +213,9 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             sampler_train.set_epoch(epoch)
-        # train_stats = train_one_epoch(
-        #     model, criterion, data_loader_train, optimizer, device, epoch,
-        #     args.clip_max_norm)
+        train_stats = train_one_epoch(
+            model, criterion, data_loader_train, optimizer, device, epoch,
+            args.clip_max_norm)
         lr_scheduler.step()
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
