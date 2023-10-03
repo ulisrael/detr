@@ -245,10 +245,11 @@ def main(args):
             sample_in, sample_tgts = next(iter(data_loader_val))
 
             # Draw boxes and original image
-            data_dir = './data/coco/val/'
+            # data_dir = './data/coco/val/'
+            data_dir = './data/voc2coco_data_test/valid'
             image_id = int(sample_tgts[0]['image_id'])
-            orig_image = dataset_val.coco.loadImgs(image_id)[0]
-            orig_image = Image.open(os.path.join(data_dir, orig_image['file_name']))
+            orig_image_path = dataset_val.coco.loadImgs(image_id)[0]
+            orig_image = Image.open(os.path.join(data_dir, orig_image_path['file_name']))
             draw = ImageDraw.Draw(orig_image, "RGBA")
 
             # get annotations and labels
